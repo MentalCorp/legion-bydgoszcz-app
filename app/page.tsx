@@ -25,6 +25,24 @@ const MONTHS = [
   'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
 ];
 
+// Wyznaczanie dni treningowych (Pn, Wt, Śr, Pt) dla wskazanego miesiąca i roku
+function getTrainingDays(year: number, monthZeroBased: number): string[] {
+  const dates: string[] = [];
+  const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(year, monthZeroBased, day);
+    const dayOfWeek = d.getDay(); // 0: Nd, 1: Pn, 2: Wt, 3: Śr, 4: Cz, 5: Pt, 6: Sb
+    if ([1, 2, 3, 5].includes(dayOfWeek)) {
+      // Format YYYY-MM-DD
+      const formattedMonth = String(monthZeroBased + 1).padStart(2, '0');
+      const formattedDay = String(day).padStart(2, '0');
+      dates.push(`${year}-${formattedMonth}-${formattedDay}`);
+    }
+  }
+  return dates;
+}
+
 export default function Home() {
   const [selectedGroup, setSelectedGroup] = useState('Początkująca');
   const [selectedYear, setSelectedYear] = useState(2026);
@@ -33,13 +51,24 @@ export default function Home() {
 
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Record<string, boolean>>({});
+  // Mapa obecności: key = `${memberId}_${sessionDate}` -> boolean
   const [attendance, setAttendance] = useState<Record<string, boolean>>({});
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   // Wyszukiwarka & Rozwijane karty
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<Partial<Member>>({});
+
+  const trainingDays = getTrainingDays(selectedYear, selectedMonth - 1);
+
+  // Ustawienie domyślnej daty przy zmianie miesiąca/roku
+  useEffect(() => {
+    if (trainingDays.length > 0) {
+      setSelectedDate(trainingDays[0]);
+    }
+  }, [selectedYear, selectedMonth]);
 
   useEffect(() => {
     fetchData();
@@ -51,6 +80,7 @@ export default function Home() {
     if (memErr) console.error('Błąd pobierania członków:', memErr);
     setMembers(membersData || []);
 
+    // Składki miesięczne
     const { data: paymentsData } = await supabase
       .from('payments')
       .select('*')
@@ -61,6 +91,7 @@ export default function Home() {
     paymentsData?.forEach(p => { payMap[p.member_id] = p.has_paid; });
     setPayments(payMap);
 
+    // Obecności dla danego miesiąca/roku
     const { data: attendanceData } = await supabase
       .from('attendance')
       .select('*')
@@ -68,7 +99,11 @@ export default function Home() {
       .eq('month', selectedMonth);
 
     const attMap: Record<string, boolean> = {};
-    attendanceData?.forEach(a => { attMap[a.member_id] = a.is_present; });
+    attendanceData?.forEach(a => {
+      if (a.session_date) {
+        attMap[`${a.member_id}_${a.session_date}`] = a.is_present;
+      }
+    });
     setAttendance(attMap);
 
     setLoading(false);
@@ -90,9 +125,9 @@ export default function Home() {
     }
   }
 
-  // Usuwanie członka (wywoływane wyłącznie z Karty Zawodnika)
+  // Usuwanie członka (z Karty)
   async function handleDeleteMember(id: string, name: string) {
-    if (!confirm(`Czy na pewno chcesz usunąć zawodnika: "${name}" z bazy danych? Ta operacja jest nieodwracalna.`)) {
+    if (!confirm(`Czy na pewno chcesz usunąć zawodnika: "${name}" z bazy danych?`)) {
       return;
     }
     const { error } = await supabase.from('members').delete().eq('id', id);
@@ -119,19 +154,22 @@ export default function Home() {
     }, { onConflict: 'member_id,year,month' });
   }
 
-  // Przełączanie obecności
-  async function toggleAttendance(memberId: string) {
-    const currentStatus = !!attendance[memberId];
+  // Przełączanie obecności na konkretnym treningu
+  async function toggleAttendance(memberId: string, date: string) {
+    if (!date) return;
+    const key = `${memberId}_${date}`;
+    const currentStatus = !!attendance[key];
     const newStatus = !currentStatus;
 
-    setAttendance({ ...attendance, [memberId]: newStatus });
+    setAttendance({ ...attendance, [key]: newStatus });
 
     await supabase.from('attendance').upsert({
       member_id: memberId,
       year: selectedYear,
       month: selectedMonth,
+      session_date: date,
       is_present: newStatus
-    });
+    }, { onConflict: 'member_id,session_date' });
   }
 
   // Zapisywanie danych karty zawodnika
@@ -149,7 +187,7 @@ export default function Home() {
     }
   }
 
-  // Eksport do pliku (CSV/Excel)
+  // Eksport do pliku
   function exportToExcel() {
     if (members.length === 0) {
       alert('Brak danych do wyeksportowania.');
@@ -157,12 +195,12 @@ export default function Home() {
     }
 
     const monthName = MONTHS[selectedMonth - 1];
-    let csvContent = `Imię i nazwisko;Grupa;Rok;Miesiąc;Składka;Obecność;Data urodzenia;Członkostwo od;Waga (kg);Wzrost (cm);Badania ważne do\n`;
+    let csvContent = `Imię i nazwisko;Grupa;Rok;Miesiąc;Składka;Wybrana Data Treningu (${selectedDate});Obecność\n`;
 
     members.forEach(member => {
       const isPaid = payments[member.id] ? 'Opłacona' : 'Zaległość';
-      const isPresent = attendance[member.id] ? 'Obecny' : 'Brak';
-      csvContent += `"${member.name}";"${member.group_name}";"${selectedYear}";"${monthName}";"${isPaid}";"${isPresent}";"${member.birth_date || ''}";"${member.member_since || ''}";"${member.weight_kg || ''}";"${member.height_cm || ''}";"${member.medical_until || ''}"\n`;
+      const isPresent = attendance[`${member.id}_${selectedDate}`] ? 'Obecny' : 'Brak';
+      csvContent += `"${member.name}";"${member.group_name}";"${selectedYear}";"${monthName}";"${isPaid}";"${selectedDate}";"${isPresent}"\n`;
     });
 
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -176,7 +214,6 @@ export default function Home() {
     document.body.removeChild(link);
   }
 
-  // Filtrowanie listy zawodników
   const filteredMembers = members.filter(m => {
     const matchesGroup = m.group_name === selectedGroup;
     const isSearching = searchQuery.trim().length >= 3;
@@ -194,7 +231,7 @@ export default function Home() {
           <div className="flex items-center space-x-3">
             <img src="/logo.png" alt="Legion Bydgoszcz" className="h-10 w-auto object-contain" />
             <h1 className="font-extrabold text-[#1251A2] text-lg tracking-wider">
-              BAZA ZAWODNIKÓW MUAYTHAI LEGION BYDGOSZCZ
+              LEGION BYDGOSZCZ
             </h1>
           </div>
           <button
@@ -205,7 +242,7 @@ export default function Home() {
           </button>
         </header>
 
-        {/* Panel Nawigacji i Eksportu */}
+        {/* Panel Nawigacji i Wyboru Treningu */}
         <div className={`p-4 rounded-xl shadow mb-4 space-y-3 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
           <div className="flex justify-between items-center">
             <span className="font-bold text-sm">Rok:</span>
@@ -247,6 +284,26 @@ export default function Home() {
             </select>
           </div>
 
+          {/* Wybór konkretnej daty treningu (Pn, Wt, Śr, Pt o 19:30) */}
+          <div className="flex justify-between items-center pt-2 border-t border-gray-700">
+            <span className="font-bold text-sm text-[#FFDF00]">🗓️ Data treningu (19:30):</span>
+            <select
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-gray-700 text-white font-bold p-2 rounded-lg outline-none text-xs border border-gray-600"
+            >
+              {trainingDays.map(dateStr => {
+                const [y, m, d] = dateStr.split('-');
+                const dayName = new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString('pl-PL', { weekday: 'short' });
+                return (
+                  <option key={dateStr} value={dateStr}>
+                    {dayName.toUpperCase()} {d}.{m}.{y} (19:30)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
           <div className="pt-2 border-t border-gray-700 flex justify-end">
             <button
               onClick={exportToExcel}
@@ -279,9 +336,6 @@ export default function Home() {
               </button>
             )}
           </div>
-          {searchQuery.trim().length > 0 && searchQuery.trim().length < 3 && (
-            <p className="text-xs text-gray-400 mt-1">Wpisz jeszcze {3 - searchQuery.trim().length} symbol(e)...</p>
-          )}
         </div>
 
         {/* Lista Zawodników */}
@@ -297,6 +351,8 @@ export default function Home() {
           ) : (
             filteredMembers.map((member) => {
               const isExpanded = expandedCardId === member.id;
+              const hasAttendedSelectedDate = !!attendance[`${member.id}_${selectedDate}`];
+
               return (
                 <div key={member.id} className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -309,11 +365,13 @@ export default function Home() {
                         >
                           Składka: {payments[member.id] ? 'Opłacona ✓' : 'Zaległość ✕'}
                         </button>
+                        
+                        {/* Przełączanie obecności na wybrany dzień treningowy */}
                         <button
-                          onClick={() => toggleAttendance(member.id)}
-                          className={`text-xs px-2.5 py-1 rounded-md font-semibold transition ${attendance[member.id] ? 'bg-blue-100 text-blue-800' : 'bg-gray-700 text-gray-300'}`}
+                          onClick={() => toggleAttendance(member.id, selectedDate)}
+                          className={`text-xs px-2.5 py-1 rounded-md font-semibold transition ${hasAttendedSelectedDate ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
                         >
-                          Obecność: {attendance[member.id] ? 'Obecny ✓' : 'Brak'}
+                          Obecność ({selectedDate ? selectedDate.split('-').slice(1).join('.') : ''}): {hasAttendedSelectedDate ? 'Obecny ✓' : 'Brak'}
                         </button>
                       </div>
                     </div>
