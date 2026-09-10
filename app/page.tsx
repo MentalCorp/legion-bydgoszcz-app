@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface Member {
   id: string;
@@ -9,20 +9,55 @@ interface Member {
   group: string;
   isPresent: boolean;
   hasPaid: boolean;
+  photoUrl?: string;
+  phone?: string;
+  joinDate?: string;
+  notes?: string;
 }
 
 export default function Home() {
   const [selectedGroup, setSelectedGroup] = useState('Wszystkie grupy');
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingDate, setTrainingDate] = useState('10.09.2026');
-  
-  // Stan do przechowywania ID otwartej karty zawodnika
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activePhotoMemberId, setActivePhotoMemberId] = useState<string | null>(null);
+
   const [members, setMembers] = useState<Member[]>([
-    { id: '1', lp: 1, name: 'Michał Nowak', group: 'Początkująca', isPresent: false, hasPaid: false },
-    { id: '2', lp: 2, name: 'Jan Kowalski_test1', group: 'Zaawansowana', isPresent: false, hasPaid: true },
-    { id: '3', lp: 3, name: 'Adam Nowak_test2', group: 'Początkująca', isPresent: false, hasPaid: false },
+    { 
+      id: '1', 
+      lp: 1, 
+      name: 'Michał Nowak', 
+      group: 'Początkująca', 
+      isPresent: false, 
+      hasPaid: false,
+      phone: '+48 600 111 222',
+      joinDate: '12.01.2025',
+      notes: 'Brak przeciwwskazań zdrowotnych. Grupa B.'
+    },
+    { 
+      id: '2', 
+      lp: 2, 
+      name: 'Jan Kowalski_test1', 
+      group: 'Zaawansowana', 
+      isPresent: false, 
+      hasPaid: true,
+      phone: '+48 500 222 333',
+      joinDate: '05.09.2024',
+      notes: 'Ochraniacze piszczeli zakupione.'
+    },
+    { 
+      id: '3', 
+      lp: 3, 
+      name: 'Adam Nowak_test2', 
+      group: 'Początkująca', 
+      isPresent: false, 
+      hasPaid: false,
+      phone: '+48 700 333 444',
+      joinDate: '01.02.2026',
+      notes: 'Wymagana zgoda rodzica.'
+    },
   ]);
 
   const logoUrl = "https://muaythai-bydgoszcz.pl/wp-content/uploads/2024/08/logo_kolor1-768x465.png";
@@ -35,9 +70,28 @@ export default function Home() {
     setMembers(members.map(m => m.id === id ? { ...m, hasPaid: !m.hasPaid } : m));
   };
 
-  // Otwieranie / zamykanie karty zawodnika
   const toggleCard = (id: string) => {
     setExpandedMemberId(expandedMemberId === id ? null : id);
+  };
+
+  // Obsługa aparatu / wyboru pliku
+  const triggerCamera = (memberId: string) => {
+    setActivePhotoMemberId(memberId);
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && activePhotoMemberId) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Image = reader.result as string;
+        setMembers(members.map(m => m.id === activePhotoMemberId ? { ...m, photoUrl: base64Image } : m));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const filteredMembers = members.filter(m => {
@@ -49,6 +103,16 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#0B132B] text-white p-3 sm:p-5 font-sans space-y-4">
       
+      {/* Ukryty input do przechwytywania zdjęcia z aparatu Androida */}
+      <input 
+        type="file" 
+        accept="image/*" 
+        capture="environment" 
+        ref={fileInputRef} 
+        onChange={handlePhotoCapture} 
+        className="hidden" 
+      />
+
       {/* 1. Nagłówek Główny */}
       <header className="bg-[#1C2541] p-3 sm:p-4 rounded-2xl border border-gray-700/60 shadow-lg flex items-center justify-between">
         <div className="flex items-center space-x-3">
@@ -107,7 +171,6 @@ export default function Home() {
             <option value="Zaawansowana">Zaawansowana</option>
           </select>
 
-          {/* Poprawiony przycisk bez błędu w literze "A" */}
           <button 
             type="button"
             onClick={() => alert('Dodaj nowego zawodnika')}
@@ -118,7 +181,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 4. Tabela Zawodników */}
+      {/* 4. Tabela Zawodników z Miniaturami Zdjęć */}
       <div className="bg-[#1C2541] rounded-2xl border border-gray-700/60 shadow-lg overflow-hidden">
         
         {/* Nagłówek Tabeli */}
@@ -145,11 +208,20 @@ export default function Home() {
                     {member.lp}.
                   </div>
 
-                  {/* Awatar + Nazwisko */}
+                  {/* Miniatura Zdjęcia + Nazwisko */}
                   <div className="col-span-5 flex items-center space-x-2 pl-1 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-slate-800 border border-gray-600 flex items-center justify-center text-gray-400 shrink-0 text-xs">
-                      👤
-                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => triggerCamera(member.id)}
+                      title="Kliknij, aby zrobić/zmienić zdjęcie"
+                      className="w-8 h-8 rounded-full bg-slate-800 border border-yellow-500/50 flex items-center justify-center overflow-hidden shrink-0 relative group cursor-pointer"
+                    >
+                      {member.photoUrl ? (
+                        <img src={member.photoUrl} alt={member.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs">📷</span>
+                      )}
+                    </button>
                     <span className="font-bold text-white truncate text-xs">
                       {member.name}
                     </span>
@@ -160,7 +232,6 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => toggleAttendance(member.id)}
-                      title="Przełącz obecność"
                       className={`w-6 h-6 rounded-full flex items-center justify-center transition active:scale-90 cursor-pointer ${
                         member.isPresent 
                           ? 'bg-emerald-500 shadow-md shadow-emerald-900/50' 
@@ -176,7 +247,6 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => togglePayment(member.id)}
-                      title="Przełącz składkę"
                       className={`w-6 h-6 rounded-full flex items-center justify-center transition active:scale-90 cursor-pointer ${
                         member.hasPaid 
                           ? 'bg-emerald-500 shadow-md shadow-emerald-900/50' 
@@ -187,12 +257,11 @@ export default function Home() {
                     </button>
                   </div>
 
-                  {/* Przycisk Karta (Działający Klik!) */}
+                  {/* Przycisk Karta Zawodnika */}
                   <div className="col-span-2 flex justify-center">
                     <button 
                       type="button"
                       onClick={() => toggleCard(member.id)}
-                      title="Otwórz profil zawodnika"
                       className={`w-7 h-7 rounded-full flex items-center justify-center transition active:scale-90 shadow-md cursor-pointer text-[10px] ${
                         isCardOpen 
                           ? 'bg-yellow-400 text-gray-900 font-bold' 
@@ -205,50 +274,79 @@ export default function Home() {
 
                 </div>
 
-                {/* Rozwijana Karta Zawodnika */}
+                {/* Pełna Karta Zawodnika po Rozwinięciu */}
                 {isCardOpen && (
                   <div className="bg-[#0D1B2A] p-4 border-t border-b border-yellow-500/30 text-xs space-y-3">
-                    <div className="flex justify-between items-start border-b border-gray-800 pb-2">
-                      <div>
-                        <p className="text-yellow-400 font-bold text-sm">{member.name}</p>
-                        <p className="text-gray-400 text-[11px]">Grupa: {member.group}</p>
+                    
+                    {/* Nagłówek Karty: Duże Zdjęcie + Dane */}
+                    <div className="flex gap-3 items-center border-b border-gray-800 pb-3">
+                      <div className="relative">
+                        <div className="w-16 h-16 rounded-xl bg-slate-800 border-2 border-yellow-400 overflow-hidden flex items-center justify-center">
+                          {member.photoUrl ? (
+                            <img src={member.photoUrl} alt={member.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-2xl text-gray-500">👤</span>
+                          )}
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => triggerCamera(member.id)}
+                          className="absolute -bottom-1 -right-1 bg-yellow-400 text-gray-900 p-1 rounded-full text-[10px] font-bold shadow"
+                        >
+                          📷
+                        </button>
                       </div>
-                      <span className="bg-blue-900/60 text-blue-300 border border-blue-700 px-2 py-0.5 rounded text-[10px]">
-                        ID: #{member.id}
-                      </span>
+
+                      <div className="flex-1">
+                        <h4 className="text-yellow-400 font-extrabold text-sm">{member.name}</h4>
+                        <p className="text-gray-300 text-[11px]">Grupa: <span className="font-semibold text-white">{member.group}</span></p>
+                        <p className="text-gray-400 text-[10px]">Telefon: {member.phone || 'Brak danych'}</p>
+                        <p className="text-gray-400 text-[10px]">Dołączył(a): {member.joinDate || 'b/d'}</p>
+                      </div>
                     </div>
 
+                    {/* Szczegóły Statusów */}
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="bg-[#1C2541] p-2 rounded-lg border border-gray-800">
-                        <span className="text-gray-400 block mb-1">Status Składki:</span>
+                      <div className="bg-[#1C2541] p-2.5 rounded-xl border border-gray-800">
+                        <span className="text-gray-400 block mb-0.5">Status Składki:</span>
                         <span className={member.hasPaid ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
                           {member.hasPaid ? 'Opłacona ✓' : 'Zaległość ✕'}
                         </span>
                       </div>
-                      <div className="bg-[#1C2541] p-2 rounded-lg border border-gray-800">
-                        <span className="text-gray-400 block mb-1">Dzisiejsza Obecność:</span>
+                      <div className="bg-[#1C2541] p-2.5 rounded-xl border border-gray-800">
+                        <span className="text-gray-400 block mb-0.5">Dzisiejsza Obecność:</span>
                         <span className={member.isPresent ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
                           {member.isPresent ? 'Obecny ✓' : 'Nieobecny ✕'}
                         </span>
                       </div>
                     </div>
 
+                    {/* Uwagi / Notatki Trenera */}
+                    <div className="bg-[#1C2541] p-2.5 rounded-xl border border-gray-800">
+                      <span className="text-gray-400 block text-[10px] mb-1">Notatki trenera:</span>
+                      <p className="text-gray-200 text-[11px] italic">
+                        {member.notes || 'Brak notatek do profilu zawodnika.'}
+                      </p>
+                    </div>
+
+                    {/* Akcje na karcie */}
                     <div className="flex gap-2 pt-1">
                       <button 
                         type="button"
-                        onClick={() => alert(`Edycja zawodnika: ${member.name}`)}
-                        className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 py-1.5 rounded-lg font-semibold text-[11px] border border-gray-700 transition"
+                        onClick={() => triggerCamera(member.id)}
+                        className="flex-1 bg-[#1251A2] hover:bg-blue-600 text-white py-2 rounded-xl font-bold text-[11px] border border-blue-400/30 transition flex items-center justify-center gap-1"
                       >
-                        ✏️ Edytuj Profil
+                        <span>📷</span> Zrób zdjęcie
                       </button>
                       <button 
                         type="button"
-                        onClick={() => alert(`Historia obecności: ${member.name}`)}
-                        className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-gray-900 py-1.5 rounded-lg font-bold text-[11px] transition"
+                        onClick={() => alert(`Edycja danych: ${member.name}`)}
+                        className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-gray-900 py-2 rounded-xl font-bold text-[11px] transition"
                       >
-                        📊 Historia
+                        ✏️ Edytuj profil
                       </button>
                     </div>
+
                   </div>
                 )}
 
