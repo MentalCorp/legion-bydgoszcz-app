@@ -24,7 +24,9 @@ export default function Home() {
   const [selectedGroup, setSelectedGroup] = useState('Początkująca');
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedMonth, setSelectedMonth] = useState(9); // Wrzesień 2026
-  const [darkMode, setDarkMode] = useState(false);
+  
+  // 1. Domyślnie włączony Dark Mode
+  const [darkMode, setDarkMode] = useState(true);
 
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Record<string, boolean>>({});
@@ -33,7 +35,6 @@ export default function Home() {
 
   // Formularz nowego członka
   const [newName, setNewName] = useState('');
-  const [newGroup, setNewGroup] = useState('Początkująca');
 
   useEffect(() => {
     fetchData();
@@ -41,7 +42,8 @@ export default function Home() {
 
   async function fetchData() {
     setLoading(true);
-    const { data: membersData } = await supabase.from('members').select('*');
+    const { data: membersData, error: memErr } = await supabase.from('members').select('*');
+    if (memErr) console.error('Błąd pobierania członków:', memErr);
     setMembers(membersData || []);
 
     const { data: paymentsData } = await supabase
@@ -67,32 +69,35 @@ export default function Home() {
     setLoading(false);
   }
 
-  // 1. Dodawanie członka
+  // 2. Naprawione dodawanie członka do aktywnej grupy
   async function handleAddMember(e: React.FormEvent) {
     e.preventDefault();
     if (!newName.trim()) return;
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('members')
-      .insert([{ name: newName, group_name: newGroup }])
-      .select();
+      .insert([{ name: newName.trim(), group_name: selectedGroup }]);
 
-    if (!error && data) {
-      setMembers([...members, data[0]]);
+    if (error) {
+      alert('Błąd podczas dodawania: ' + error.message);
+    } else {
       setNewName('');
+      await fetchData(); // Odświeżenie danych po dodaniu
     }
   }
 
-  // 1. Usuwanie członka
+  // Usuwanie członka
   async function handleDeleteMember(id: string) {
     if (!confirm('Czy na pewno chcesz usunąć zawodnika?')) return;
     const { error } = await supabase.from('members').delete().eq('id', id);
     if (!error) {
       setMembers(members.filter(m => m.id !== id));
+    } else {
+      alert('Błąd podczas usuwania: ' + error.message);
     }
   }
 
-  // 2. Przełączanie opłaty
+  // Przełączanie opłaty
   async function togglePayment(memberId: string) {
     const currentStatus = !!payments[memberId];
     const newStatus = !currentStatus;
@@ -107,7 +112,7 @@ export default function Home() {
     }, { onConflict: 'member_id,year,month' });
   }
 
-  // 2. Przełączanie obecności
+  // Przełączanie obecności
   async function toggleAttendance(memberId: string) {
     const currentStatus = !!attendance[memberId];
     const newStatus = !currentStatus;
@@ -122,7 +127,7 @@ export default function Home() {
     });
   }
 
-  // 5. Eksport bazy danych do pliku Excel/CSV
+  // Eksport do CSV / Excel
   function exportToExcel() {
     if (members.length === 0) {
       alert('Brak danych do wyeksportowania.');
@@ -130,18 +135,14 @@ export default function Home() {
     }
 
     const monthName = MONTHS[selectedMonth - 1];
-    
-    // Nagłówki CSV
     let csvContent = `Imię i nazwisko;Grupa;Rok;Miesiąc;Składka;Obecność\n`;
 
-    // Wiersze zawodników
     members.forEach(member => {
       const isPaid = payments[member.id] ? 'Opłacona' : 'Zaległość';
       const isPresent = attendance[member.id] ? 'Obecny' : 'Brak';
       csvContent += `"${member.name}";"${member.group_name}";"${selectedYear}";"${monthName}";"${isPaid}";"${isPresent}"\n`;
     });
 
-    // Kodowanie UTF-8 BOM dla poprawnego otwierania w polskim Excelu
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     
@@ -158,7 +159,7 @@ export default function Home() {
   return (
     <div className={`min-h-screen flex flex-col justify-between p-4 font-sans transition-colors ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
       <div>
-        {/* Nagłówek & Dark/Light Mode */}
+        {/* Nagłówek & Przełącznik Dark Mode */}
         <header className="bg-[#FFDF00] p-4 rounded-xl border-b-4 border-[#1251A2] flex items-center justify-between mb-6 shadow">
           <div className="flex items-center space-x-3">
             <img src="/logo.png" alt="Legion Bydgoszcz" className="h-10 w-auto object-contain" />
@@ -168,13 +169,13 @@ export default function Home() {
           </div>
           <button
             onClick={() => setDarkMode(!darkMode)}
-            className="bg-[#1251A2] text-[#FFDF00] font-bold px-3 py-1 rounded-lg text-xs"
+            className="bg-[#1251A2] text-[#FFDF00] font-bold px-3 py-1 rounded-lg text-xs shadow"
           >
             {darkMode ? '☀️ Light' : '🌙 Dark'}
           </button>
         </header>
 
-        {/* Nawigacja Rok / Miesiąc / Grupa */}
+        {/* Panel Wyboru */}
         <div className={`p-4 rounded-xl shadow mb-4 space-y-3 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
           <div className="flex justify-between items-center">
             <span className="font-bold">Rok:</span>
@@ -183,7 +184,7 @@ export default function Home() {
                 <button
                   key={year}
                   onClick={() => setSelectedYear(year)}
-                  className={`px-3 py-1 rounded-lg font-bold text-sm ${selectedYear === year ? 'bg-[#1251A2] text-white' : 'bg-gray-200 text-gray-800'}`}
+                  className={`px-3 py-1 rounded-lg font-bold text-sm ${selectedYear === year ? 'bg-[#1251A2] text-white' : 'bg-gray-700 text-gray-200'}`}
                 >
                   {year}
                 </button>
@@ -204,7 +205,7 @@ export default function Home() {
             </select>
           </div>
 
-          <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+          <div className="flex justify-between items-center pt-2 border-t border-gray-700">
             <span className="font-bold">Grupa:</span>
             <select
               value={selectedGroup}
@@ -216,8 +217,7 @@ export default function Home() {
             </select>
           </div>
 
-          {/* Przycisk Eksportu do Excela */}
-          <div className="pt-2 border-t border-gray-200 flex justify-end">
+          <div className="pt-2 border-t border-gray-700 flex justify-end">
             <button
               onClick={exportToExcel}
               className="bg-[#FFDF00] text-[#1251A2] font-extrabold px-3 py-2 rounded-lg text-xs flex items-center gap-1 shadow hover:bg-yellow-400 transition"
@@ -227,16 +227,16 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Formularz dodawania członka */}
+        {/* Formularz Dodawania Członka */}
         <form onSubmit={handleAddMember} className={`p-4 rounded-xl shadow mb-4 flex gap-2 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
           <input
             type="text"
-            placeholder="Imię i nazwisko"
+            placeholder={`Nowy zawodnik w gr. ${selectedGroup}`}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="flex-1 p-2 rounded-lg border text-gray-900 text-sm outline-none"
+            className="flex-1 p-2 rounded-lg border border-gray-600 text-gray-900 text-sm outline-none"
           />
-          <button type="submit" className="bg-green-600 text-white font-bold px-4 py-2 rounded-lg text-sm">
+          <button type="submit" className="bg-green-600 text-white font-bold px-4 py-2 rounded-lg text-sm shadow hover:bg-green-700">
             + Dodaj
           </button>
         </form>
@@ -244,9 +244,9 @@ export default function Home() {
         {/* Lista Zawodników */}
         <div className={`rounded-xl shadow divide-y ${darkMode ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-100'}`}>
           {loading ? (
-            <div className="p-4 text-center">Ładowanie danych...</div>
+            <div className="p-4 text-center text-gray-400">Ładowanie danych...</div>
           ) : filteredMembers.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">Brak zawodników w tej grupie.</div>
+            <div className="p-4 text-center text-gray-400">Brak zawodników w grupie {selectedGroup}.</div>
           ) : (
             filteredMembers.map((member) => (
               <div key={member.id} className="p-4 flex items-center justify-between">
@@ -261,7 +261,7 @@ export default function Home() {
                     </button>
                     <button
                       onClick={() => toggleAttendance(member.id)}
-                      className={`text-xs px-2 py-1 rounded font-semibold ${attendance[member.id] ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-600'}`}
+                      className={`text-xs px-2 py-1 rounded font-semibold ${attendance[member.id] ? 'bg-blue-100 text-blue-800' : 'bg-gray-700 text-gray-300'}`}
                     >
                       Obecność: {attendance[member.id] ? 'Obecny ✓' : 'Brak'}
                     </button>
@@ -269,7 +269,7 @@ export default function Home() {
                 </div>
                 <button
                   onClick={() => handleDeleteMember(member.id)}
-                  className="text-red-500 text-sm font-bold px-2 py-1"
+                  className="text-red-500 text-sm font-bold px-2 py-1 hover:text-red-700"
                 >
                   ✕
                 </button>
