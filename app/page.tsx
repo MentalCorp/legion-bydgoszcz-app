@@ -90,14 +90,17 @@ export default function Home() {
     }
   }
 
-  // Usuwanie członka
-  async function handleDeleteMember(id: string) {
-    if (!confirm('Czy na pewno chcesz usunąć zawodnika?')) return;
+  // Usuwanie członka (wywoływane wyłącznie z Karty Zawodnika)
+  async function handleDeleteMember(id: string, name: string) {
+    if (!confirm(`Czy na pewno chcesz usunąć zawodnika: "${name}" z bazy danych? Ta operacja jest nieodwracalna.`)) {
+      return;
+    }
     const { error } = await supabase.from('members').delete().eq('id', id);
     if (!error) {
       setMembers(members.filter(m => m.id !== id));
+      setExpandedCardId(null);
     } else {
-      alert('Błąd podczas usuwania: ' + error.message);
+      alert('Błąd podczas usuwania zawodnika: ' + error.message);
     }
   }
 
@@ -141,7 +144,7 @@ export default function Home() {
     if (error) {
       alert('Błąd zapisu karty zawodnika: ' + error.message);
     } else {
-      alert('Zapisano kartę zawodnika!');
+      alert('Zapisano dane zawodnika!');
       fetchData();
     }
   }
@@ -191,7 +194,7 @@ export default function Home() {
           <div className="flex items-center space-x-3">
             <img src="/logo.png" alt="Legion Bydgoszcz" className="h-10 w-auto object-contain" />
             <h1 className="font-extrabold text-[#1251A2] text-lg tracking-wider">
-              LEGION BYDGOSZCZ
+              BAZA ZAWODNIKÓW MUAYTHAI LEGION BYDGOSZCZ
             </h1>
           </div>
           <button
@@ -281,7 +284,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* Lista Zawodników & Karta Zawodnika */}
+        {/* Lista Zawodników */}
         <div className={`rounded-xl shadow divide-y ${darkMode ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-100'}`}>
           {loading ? (
             <div className="p-4 text-center text-gray-400">Ładowanie danych...</div>
@@ -315,28 +318,19 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => {
-                          if (isExpanded) {
-                            setExpandedCardId(null);
-                          } else {
-                            setExpandedCardId(member.id);
-                            setEditingMember(member);
-                          }
-                        }}
-                        className="bg-[#1251A2] text-white text-xs px-3 py-1.5 rounded-lg font-bold shadow hover:bg-blue-800 transition"
-                      >
-                        {isExpanded ? 'Zamknij kartę' : 'Karta zawodnika 📋'}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteMember(member.id)}
-                        className="text-red-500 text-sm font-bold px-2 py-1 hover:text-red-700"
-                        title="Usuń zawodnika"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        if (isExpanded) {
+                          setExpandedCardId(null);
+                        } else {
+                          setExpandedCardId(member.id);
+                          setEditingMember(member);
+                        }
+                      }}
+                      className="bg-[#1251A2] text-white text-xs px-3 py-1.5 rounded-lg font-bold shadow hover:bg-blue-800 transition"
+                    >
+                      {isExpanded ? 'Zamknij kartę' : 'Karta zawodnika 📋'}
+                    </button>
                   </div>
 
                   {/* Rozwijana Karta Zawodnika */}
@@ -399,7 +393,14 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div className="flex justify-end pt-2">
+                      {/* Akcje w Karcie Zawodnika */}
+                      <div className="flex justify-between items-center pt-3 border-t border-gray-700">
+                        <button
+                          onClick={() => handleDeleteMember(member.id, member.name)}
+                          className="bg-red-600/20 text-red-400 border border-red-600/50 hover:bg-red-600 hover:text-white font-bold px-3 py-1.5 rounded-lg text-xs transition"
+                        >
+                          🗑️ Usuń zawodnika
+                        </button>
                         <button
                           onClick={() => handleSaveCard(member.id)}
                           className="bg-green-600 text-white font-bold px-4 py-1.5 rounded-lg text-xs shadow hover:bg-green-700 transition"
