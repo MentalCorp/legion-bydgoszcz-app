@@ -5,9 +5,9 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Inicjalizacja połączenia z Supabase na podstawie zmiennych z Vercela
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Bezpieczna inicjalizacja (z zabezpieczeniem przed pustym URL w trakcie prerenderingu)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface Member {
@@ -22,23 +22,22 @@ export default function Home() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Pobieranie zawodników z bazy Supabase przy załadowaniu strony
   useEffect(() => {
     fetchMembers();
   }, []);
 
   async function fetchMembers() {
     setLoading(true);
-    const { data, error } = await supabase.from('members').select('*');
-    if (error) {
-      console.error('Błąd pobierania danych:', error);
-    } else {
-      setMembers(data || []);
+    try {
+      const { data, error } = await supabase.from('members').select('*');
+      if (error) console.error('Błąd pobierania danych:', error);
+      else setMembers(data || []);
+    } catch (err) {
+      console.error('Błąd połączenia:', err);
     }
     setLoading(false);
   }
 
-  // Zmiana statusu opłacenia składki w bazie
   async function togglePayment(id: string, currentStatus: boolean) {
     const { error } = await supabase
       .from('members')
@@ -54,7 +53,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 font-sans">
-      {/* Nagłówek */}
       <header className="bg-[#FFDF00] p-4 rounded-xl border-b-4 border-[#1251A2] flex items-center justify-between mb-6 shadow">
         <div className="flex items-center space-x-3">
           <img 
@@ -68,7 +66,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Wybór grupy */}
       <div className="bg-white p-4 rounded-xl shadow mb-4 flex justify-between items-center">
         <span className="font-bold text-gray-700">Grupa:</span>
         <select 
@@ -81,7 +78,6 @@ export default function Home() {
         </select>
       </div>
 
-      {/* Lista zawodników z bazy */}
       <div className="bg-white rounded-xl shadow divide-y divide-gray-100">
         {loading ? (
           <div className="p-4 text-center text-gray-500">Ładowanie zawodników z bazy...</div>
