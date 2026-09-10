@@ -29,9 +29,11 @@ export default function Home() {
       {/* Nagłówek bez znacznika img */}
       <header className="bg-[#FFDF00] p-4 rounded-xl border-b-4 border-[#1251A2] flex items-center justify-between mb-6 shadow">
         <div className="flex items-center space-x-3">
-          <div className="bg-[#1251A2] text-[#FFDF00] font-black px-3 py-1 rounded-lg text-lg">
-            MT
-          </div>
+          <img 
+  src="/logo.png" 
+  alt="Legion Bydgoszcz" 
+  className="h-12 w-auto object-contain" 
+/>
           <h1 className="font-extrabold text-[#1251A2] text-xl tracking-wider">
             LEGION BYDGOSZCZ
           </h1>
