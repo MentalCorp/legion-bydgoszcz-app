@@ -1,39 +1,65 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+// Inicjalizacja połączenia z Supabase na podstawie zmiennych z Vercela
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface Member {
   id: string;
   name: string;
-  group: string;
-  isPresent: boolean;
-  hasPaid: boolean;
+  group_name: string;
+  has_paid: boolean;
 }
 
 export default function Home() {
   const [selectedGroup, setSelectedGroup] = useState('Początkująca');
-  const [members, setMembers] = useState<Member[]>([
-    { id: '1', name: 'Jan Kowalski', group: 'Początkująca', isPresent: false, hasPaid: true },
-    { id: '2', name: 'Michał Nowak', group: 'Początkująca', isPresent: false, hasPaid: false },
-    { id: '3', name: 'Piotr Wiśniewski', group: 'Zaawansowana', isPresent: false, hasPaid: true },
-  ]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const toggleAttendance = (id: string) => {
-    setMembers(members.map(m => m.id === id ? { ...m, isPresent: !m.isPresent } : m));
-  };
+  // Pobieranie zawodników z bazy Supabase przy załadowaniu strony
+  useEffect(() => {
+    fetchMembers();
+  }, []);
 
-  const filteredMembers = members.filter(m => m.group === selectedGroup);
+  async function fetchMembers() {
+    setLoading(true);
+    const { data, error } = await supabase.from('members').select('*');
+    if (error) {
+      console.error('Błąd pobierania danych:', error);
+    } else {
+      setMembers(data || []);
+    }
+    setLoading(false);
+  }
+
+  // Zmiana statusu opłacenia składki w bazie
+  async function togglePayment(id: string, currentStatus: boolean) {
+    const { error } = await supabase
+      .from('members')
+      .update({ has_paid: !currentStatus })
+      .eq('id', id);
+
+    if (!error) {
+      setMembers(members.map(m => m.id === id ? { ...m, has_paid: !currentStatus } : m));
+    }
+  }
+
+  const filteredMembers = members.filter(m => m.group_name === selectedGroup);
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 font-sans">
-      {/* Nagłówek bez znacznika img */}
+      {/* Nagłówek */}
       <header className="bg-[#FFDF00] p-4 rounded-xl border-b-4 border-[#1251A2] flex items-center justify-between mb-6 shadow">
         <div className="flex items-center space-x-3">
           <img 
-  src="/logo.png" 
-  alt="Legion Bydgoszcz" 
-  className="h-12 w-auto object-contain" 
-/>
+            src="/logo.png" 
+            alt="Legion Bydgoszcz" 
+            className="h-12 w-auto object-contain" 
+          />
           <h1 className="font-extrabold text-[#1251A2] text-xl tracking-wider">
             LEGION BYDGOSZCZ
           </h1>
@@ -53,26 +79,29 @@ export default function Home() {
         </select>
       </div>
 
-      {/* Lista zawodników */}
+      {/* Lista zawodników z bazy */}
       <div className="bg-white rounded-xl shadow divide-y divide-gray-100">
-        {filteredMembers.map((member) => (
-          <div key={member.id} className="p-4 flex items-center justify-between">
-            <div>
-              <p className="font-bold text-gray-800">{member.name}</p>
-              <span className={`text-xs px-2 py-0.5 rounded font-semibold ${member.hasPaid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                {member.hasPaid ? 'Składka: Opłacona' : 'Składka: Zaległość'}
-              </span>
+        {loading ? (
+          <div className="p-4 text-center text-gray-500">Ładowanie zawodników z bazy...</div>
+        ) : filteredMembers.length === 0 ? (
+          <div className="p-4 text-center text-gray-500">Brak zawodników w tej grupie.</div>
+        ) : (
+          filteredMembers.map((member) => (
+            <div key={member.id} className="p-4 flex items-center justify-between">
+              <div>
+                <p className="font-bold text-gray-800">{member.name}</p>
+                <button 
+                  onClick={() => togglePayment(member.id, member.has_paid)}
+                  className={`text-xs px-2 py-1 rounded font-semibold mt-1 transition ${
+                    member.has_paid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}
+                >
+                  {member.has_paid ? 'Składka: Opłacona ✓' : 'Składka: Zaległość ✕'}
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => toggleAttendance(member.id)}
-              className={`w-12 h-12 rounded-xl text-xl font-bold ${
-                member.isPresent ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400 border'
-              }`}
-            >
-              {member.isPresent ? '✓' : '+'}
-            </button>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
