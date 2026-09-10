@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Bezpieczna inicjalizacja (z zabezpieczeniem przed pustym URL w trakcie prerenderingu)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -14,93 +13,276 @@ interface Member {
   id: string;
   name: string;
   group_name: string;
-  has_paid: boolean;
 }
+
+const MONTHS = [
+  'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
+  'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
+];
 
 export default function Home() {
   const [selectedGroup, setSelectedGroup] = useState('Początkująca');
+  const [selectedYear, setSelectedYear] = useState(2026);
+  const [selectedMonth, setSelectedMonth] = useState(9); // Wrzesień 2026
+  const [darkMode, setDarkMode] = useState(false);
+
   const [members, setMembers] = useState<Member[]>([]);
+  const [payments, setPayments] = useState<Record<string, boolean>>({});
+  const [attendance, setAttendance] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchMembers();
-  }, []);
+  // Formularz nowego członka
+  const [newName, setNewName] = useState('');
+  const [newGroup, setNewGroup] = useState('Początkująca');
 
-  async function fetchMembers() {
+  useEffect(() => {
+    fetchData();
+  }, [selectedYear, selectedMonth]);
+
+  async function fetchData() {
     setLoading(true);
-    try {
-      const { data, error } = await supabase.from('members').select('*');
-      if (error) console.error('Błąd pobierania danych:', error);
-      else setMembers(data || []);
-    } catch (err) {
-      console.error('Błąd połączenia:', err);
-    }
+    const { data: membersData } = await supabase.from('members').select('*');
+    setMembers(membersData || []);
+
+    const { data: paymentsData } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('year', selectedYear)
+      .eq('month', selectedMonth);
+
+    const payMap: Record<string, boolean> = {};
+    paymentsData?.forEach(p => { payMap[p.member_id] = p.has_paid; });
+    setPayments(payMap);
+
+    const { data: attendanceData } = await supabase
+      .from('attendance')
+      .select('*')
+      .eq('year', selectedYear)
+      .eq('month', selectedMonth);
+
+    const attMap: Record<string, boolean> = {};
+    attendanceData?.forEach(a => { attMap[a.member_id] = a.is_present; });
+    setAttendance(attMap);
+
     setLoading(false);
   }
 
-  async function togglePayment(id: string, currentStatus: boolean) {
-    const { error } = await supabase
-      .from('members')
-      .update({ has_paid: !currentStatus })
-      .eq('id', id);
+  // 1. Dodawanie członka
+  async function handleAddMember(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim()) return;
 
-    if (!error) {
-      setMembers(members.map(m => m.id === id ? { ...m, has_paid: !currentStatus } : m));
+    const { data, error } = await supabase
+      .from('members')
+      .insert([{ name: newName, group_name: newGroup }])
+      .select();
+
+    if (!error && data) {
+      setMembers([...members, data[0]]);
+      setNewName('');
     }
+  }
+
+  // 1. Usuwanie członka
+  async function handleDeleteMember(id: string) {
+    if (!confirm('Czy na pewno chcesz usunąć zawodnika?')) return;
+    const { error } = await supabase.from('members').delete().eq('id', id);
+    if (!error) {
+      setMembers(members.filter(m => m.id !== id));
+    }
+  }
+
+  // 2. Przełączanie opłaty
+  async function togglePayment(memberId: string) {
+    const currentStatus = !!payments[memberId];
+    const newStatus = !currentStatus;
+
+    setPayments({ ...payments, [memberId]: newStatus });
+
+    await supabase.from('payments').upsert({
+      member_id: memberId,
+      year: selectedYear,
+      month: selectedMonth,
+      has_paid: newStatus
+    }, { onConflict: 'member_id,year,month' });
+  }
+
+  // 2. Przełączanie obecności
+  async function toggleAttendance(memberId: string) {
+    const currentStatus = !!attendance[memberId];
+    const newStatus = !currentStatus;
+
+    setAttendance({ ...attendance, [memberId]: newStatus });
+
+    await supabase.from('attendance').upsert({
+      member_id: memberId,
+      year: selectedYear,
+      month: selectedMonth,
+      is_present: newStatus
+    });
+  }
+
+  // 5. Eksport bazy danych do pliku Excel/CSV
+  function exportToExcel() {
+    if (members.length === 0) {
+      alert('Brak danych do wyeksportowania.');
+      return;
+    }
+
+    const monthName = MONTHS[selectedMonth - 1];
+    
+    // Nagłówki CSV
+    let csvContent = `Imię i nazwisko;Grupa;Rok;Miesiąc;Składka;Obecność\n`;
+
+    // Wiersze zawodników
+    members.forEach(member => {
+      const isPaid = payments[member.id] ? 'Opłacona' : 'Zaległość';
+      const isPresent = attendance[member.id] ? 'Obecny' : 'Brak';
+      csvContent += `"${member.name}";"${member.group_name}";"${selectedYear}";"${monthName}";"${isPaid}";"${isPresent}"\n`;
+    });
+
+    // Kodowanie UTF-8 BOM dla poprawnego otwierania w polskim Excelu
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Legion_Bydgoszcz_${monthName}_${selectedYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   const filteredMembers = members.filter(m => m.group_name === selectedGroup);
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 font-sans">
-      <header className="bg-[#FFDF00] p-4 rounded-xl border-b-4 border-[#1251A2] flex items-center justify-between mb-6 shadow">
-        <div className="flex items-center space-x-3">
-          <img 
-            src="/logo.png" 
-            alt="Legion Bydgoszcz" 
-            className="h-12 w-auto object-contain" 
-          />
-          <h1 className="font-extrabold text-[#1251A2] text-xl tracking-wider">
-            LEGION BYDGOSZCZ
-          </h1>
-        </div>
-      </header>
+    <div className={`min-h-screen flex flex-col justify-between p-4 font-sans transition-colors ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+      <div>
+        {/* Nagłówek & Dark/Light Mode */}
+        <header className="bg-[#FFDF00] p-4 rounded-xl border-b-4 border-[#1251A2] flex items-center justify-between mb-6 shadow">
+          <div className="flex items-center space-x-3">
+            <img src="/logo.png" alt="Legion Bydgoszcz" className="h-10 w-auto object-contain" />
+            <h1 className="font-extrabold text-[#1251A2] text-lg tracking-wider">
+              LEGION BYDGOSZCZ
+            </h1>
+          </div>
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="bg-[#1251A2] text-[#FFDF00] font-bold px-3 py-1 rounded-lg text-xs"
+          >
+            {darkMode ? '☀️ Light' : '🌙 Dark'}
+          </button>
+        </header>
 
-      <div className="bg-white p-4 rounded-xl shadow mb-4 flex justify-between items-center">
-        <span className="font-bold text-gray-700">Grupa:</span>
-        <select 
-          value={selectedGroup} 
-          onChange={(e) => setSelectedGroup(e.target.value)}
-          className="bg-[#FFDF00] font-bold p-2 rounded-lg border border-yellow-500 outline-none text-gray-900"
-        >
-          <option value="Początkująca">Początkująca</option>
-          <option value="Zaawansowana">Zaawansowana</option>
-        </select>
-      </div>
-
-      <div className="bg-white rounded-xl shadow divide-y divide-gray-100">
-        {loading ? (
-          <div className="p-4 text-center text-gray-500">Ładowanie zawodników z bazy...</div>
-        ) : filteredMembers.length === 0 ? (
-          <div className="p-4 text-center text-gray-500">Brak zawodników w tej grupie.</div>
-        ) : (
-          filteredMembers.map((member) => (
-            <div key={member.id} className="p-4 flex items-center justify-between">
-              <div>
-                <p className="font-bold text-gray-800">{member.name}</p>
-                <button 
-                  onClick={() => togglePayment(member.id, member.has_paid)}
-                  className={`text-xs px-2 py-1 rounded font-semibold mt-1 transition ${
-                    member.has_paid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}
+        {/* Nawigacja Rok / Miesiąc / Grupa */}
+        <div className={`p-4 rounded-xl shadow mb-4 space-y-3 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className="flex justify-between items-center">
+            <span className="font-bold">Rok:</span>
+            <div className="space-x-2">
+              {[2026, 2027].map(year => (
+                <button
+                  key={year}
+                  onClick={() => setSelectedYear(year)}
+                  className={`px-3 py-1 rounded-lg font-bold text-sm ${selectedYear === year ? 'bg-[#1251A2] text-white' : 'bg-gray-200 text-gray-800'}`}
                 >
-                  {member.has_paid ? 'Składka: Opłacona ✓' : 'Składka: Zaległość ✕'}
+                  {year}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center">
+            <span className="font-bold">Miesiąc:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="bg-[#FFDF00] font-bold p-2 rounded-lg text-gray-900 outline-none text-sm"
+            >
+              {MONTHS.map((m, idx) => (
+                <option key={idx} value={idx + 1}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+            <span className="font-bold">Grupa:</span>
+            <select
+              value={selectedGroup}
+              onChange={(e) => setSelectedGroup(e.target.value)}
+              className="bg-[#FFDF00] font-bold p-2 rounded-lg text-gray-900 outline-none text-sm"
+            >
+              <option value="Początkująca">Początkująca</option>
+              <option value="Zaawansowana">Zaawansowana</option>
+            </select>
+          </div>
+
+          {/* Przycisk Eksportu do Excela */}
+          <div className="pt-2 border-t border-gray-200 flex justify-end">
+            <button
+              onClick={exportToExcel}
+              className="bg-[#FFDF00] text-[#1251A2] font-extrabold px-3 py-2 rounded-lg text-xs flex items-center gap-1 shadow hover:bg-yellow-400 transition"
+            >
+              📊 Eksportuj do Excela (.csv)
+            </button>
+          </div>
+        </div>
+
+        {/* Formularz dodawania członka */}
+        <form onSubmit={handleAddMember} className={`p-4 rounded-xl shadow mb-4 flex gap-2 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <input
+            type="text"
+            placeholder="Imię i nazwisko"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            className="flex-1 p-2 rounded-lg border text-gray-900 text-sm outline-none"
+          />
+          <button type="submit" className="bg-green-600 text-white font-bold px-4 py-2 rounded-lg text-sm">
+            + Dodaj
+          </button>
+        </form>
+
+        {/* Lista Zawodników */}
+        <div className={`rounded-xl shadow divide-y ${darkMode ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-100'}`}>
+          {loading ? (
+            <div className="p-4 text-center">Ładowanie danych...</div>
+          ) : filteredMembers.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">Brak zawodników w tej grupie.</div>
+          ) : (
+            filteredMembers.map((member) => (
+              <div key={member.id} className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-bold">{member.name}</p>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => togglePayment(member.id)}
+                      className={`text-xs px-2 py-1 rounded font-semibold ${payments[member.id] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+                    >
+                      Składka: {payments[member.id] ? 'Opłacona ✓' : 'Zaległość ✕'}
+                    </button>
+                    <button
+                      onClick={() => toggleAttendance(member.id)}
+                      className={`text-xs px-2 py-1 rounded font-semibold ${attendance[member.id] ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-600'}`}
+                    >
+                      Obecność: {attendance[member.id] ? 'Obecny ✓' : 'Brak'}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDeleteMember(member.id)}
+                  className="text-red-500 text-sm font-bold px-2 py-1"
+                >
+                  ✕
                 </button>
               </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
+
+      {/* Stopka */}
+      <footer className="mt-8 text-center text-xs text-gray-500 py-4">
+        © MentalCorp Media 2026. All rights reserved.
+      </footer>
     </div>
   );
 }
