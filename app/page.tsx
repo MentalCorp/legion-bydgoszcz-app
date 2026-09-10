@@ -583,10 +583,9 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Stopka */}
+      {/* Zaktualizowana Stopka */}
       <footer className="mt-6 pt-4 border-t border-gray-800 text-center text-gray-500 text-[10px]">
-        <p>© 2026 Legion Bydgoszcz. Wszelkie prawa zastrzeżone.</p>
-        <p className="mt-0.5 text-gray-600">System Zarządzania Baza Zawodników v1.2</p>
+        <p>Demo ver. 1.0 © MentalCorp Media 2026</p>
       </footer>
 
     </div>
