@@ -10,6 +10,9 @@ interface Member {
   attendanceHistory: { [date: string]: boolean };
   avatarUrl?: string;
   phone?: string;
+  birthDate?: string;
+  weight?: string;
+  height?: string;
   joinDate?: string;
 }
 
@@ -21,14 +24,22 @@ export default function Home() {
     return today.toISOString().split('T')[0];
   });
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // Stan dla nowego zawodnika
+  const [newMember, setNewMember] = useState({
+    name: '',
+    group: 'Początkująca',
+    phone: '',
+    birthDate: '',
+    weight: '',
+    height: '',
+  });
 
   const [members, setMembers] = useState<Member[]>([
-    { id: '1', name: 'Michał Nowak', group: 'Początkująca', hasPaid: false, attendanceHistory: {}, phone: '500-111-222', joinDate: '2024-01-15' },
-    { id: '2', name: 'Jan Kowalski_test1', group: 'Zaawansowana', hasPaid: true, attendanceHistory: {}, phone: '600-333-444', joinDate: '2023-09-01' },
-    { id: '3', name: 'Adam Nowak_test2', group: 'Początkująca', hasPaid: false, attendanceHistory: {}, phone: '700-555-666', joinDate: '2024-03-10' },
-    { id: '4', name: 'Michał Wójcik_test4', group: 'Zaawansowana', hasPaid: true, attendanceHistory: {}, phone: '501-777-888', joinDate: '2023-11-20' },
-    { id: '5', name: 'Paweł Zieliński_test7', group: 'Początkująca', hasPaid: false, attendanceHistory: {}, phone: '602-999-000', joinDate: '2024-02-01' },
-    { id: '6', name: 'Marek Woźniak_test9', group: 'Zaawansowana', hasPaid: false, attendanceHistory: {}, phone: '703-123-456', joinDate: '2023-08-12' },
+    { id: '1', name: 'Michał Nowak', group: 'Początkująca', hasPaid: false, attendanceHistory: {}, phone: '500-111-222', birthDate: '1998-05-12', weight: '75', height: '180', joinDate: '2024-01-15' },
+    { id: '2', name: 'Jan Kowalski_test1', group: 'Zaawansowana', hasPaid: true, attendanceHistory: {}, phone: '600-333-444', birthDate: '1995-11-03', weight: '81', height: '185', joinDate: '2023-09-01' },
+    { id: '3', name: 'Adam Nowak_test2', group: 'Początkująca', hasPaid: false, attendanceHistory: {}, phone: '700-555-666', birthDate: '2001-02-20', weight: '68', height: '175', joinDate: '2024-03-10' },
   ]);
 
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
@@ -69,6 +80,28 @@ export default function Home() {
     }
   };
 
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMember.name) return;
+
+    const createdMember: Member = {
+      id: Date.now().toString(),
+      name: newMember.name,
+      group: newMember.group,
+      phone: newMember.phone,
+      birthDate: newMember.birthDate,
+      weight: newMember.weight,
+      height: newMember.height,
+      hasPaid: false,
+      attendanceHistory: {},
+      joinDate: new Date().toISOString().split('T')[0],
+    };
+
+    setMembers([createdMember, ...members]);
+    setNewMember({ name: '', group: 'Początkująca', phone: '', birthDate: '', weight: '', height: '' });
+    setIsAddModalOpen(false);
+  };
+
   const filteredMembers = members.filter(m => {
     const matchesGroup = selectedGroup === 'Wszyscy' || m.group === selectedGroup;
     const matchesQuery = m.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -106,12 +139,11 @@ export default function Home() {
         />
       </div>
 
-      {/* Pasek filtrowania oraz wyboru daty treningu */}
+      {/* Pasek akcji: Kalendarz, Filtrowanie, Przycisk dodawania */}
       <div className="bg-[#1E293B] p-4 rounded-2xl border border-gray-700 mb-6 flex flex-col md:flex-row gap-3 justify-between items-stretch md:items-center">
         
-        {/* Wybór daty treningu do sprawozdania obecności */}
         <div className="flex items-center justify-between md:justify-start gap-2 bg-[#0F172A] p-2.5 rounded-xl border border-yellow-500/50">
-          <span className="font-bold text-yellow-400 text-xs md:text-sm flex items-center gap-1">
+          <span className="font-bold text-yellow-400 text-xs md:text-sm">
             📅 Data treningu:
           </span>
           <input 
@@ -122,9 +154,7 @@ export default function Home() {
           />
         </div>
 
-        {/* Filtr grupy */}
-        <div className="flex items-center justify-between md:justify-start gap-2">
-          <span className="font-bold text-gray-300 text-xs md:text-sm">Grupa:</span>
+        <div className="flex items-center justify-between gap-2">
           <select 
             value={selectedGroup} 
             onChange={(e) => setSelectedGroup(e.target.value)}
@@ -134,14 +164,22 @@ export default function Home() {
             <option value="Początkująca">Początkująca</option>
             <option value="Zaawansowana">Zaawansowana</option>
           </select>
+
+          {/* Przycisk Dodaj Zawodnika */}
+          <button 
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-green-600 hover:bg-green-500 text-white font-extrabold text-xs md:text-sm py-2 px-3 rounded-xl transition active:scale-95 border border-green-400 shadow-md"
+          >
+            + DODAJ ZAWODNIKA
+          </button>
         </div>
 
       </div>
 
-      {/* Tabela zawodników z bezpośrednim odznaczaniem obecności */}
+      {/* Tabela zawodników */}
       <div className="bg-[#1E293B] rounded-2xl border border-gray-800 shadow-xl overflow-hidden">
         
-        {/* Nagłówek Tabeli */}
         <div className="grid grid-cols-12 bg-[#0B132B] p-3 text-[11px] md:text-xs font-extrabold text-yellow-400 border-b border-gray-800 uppercase tracking-wider items-center">
           <div className="col-span-1 text-center">Lp.</div>
           <div className="col-span-4 md:col-span-5 pl-1">Zawodnik</div>
@@ -150,7 +188,6 @@ export default function Home() {
           <div className="col-span-2 md:col-span-1 text-right pr-1">Karta</div>
         </div>
 
-        {/* Wiersze Tabeli */}
         <div className="divide-y divide-gray-800/60">
           {filteredMembers.map((member, index) => {
             const isExpanded = expandedMemberId === member.id;
@@ -159,15 +196,11 @@ export default function Home() {
             return (
               <div key={member.id} className="transition bg-[#1E293B] hover:bg-[#28354A]">
                 
-                {/* Wiersz główny z szybką obecnością */}
                 <div className="grid grid-cols-12 p-2.5 md:p-3 items-center text-xs md:text-sm">
-                  
-                  {/* Lp. */}
                   <div className="col-span-1 text-center font-bold text-gray-400">
                     {index + 1}.
                   </div>
 
-                  {/* Zawodnik */}
                   <div className="col-span-4 md:col-span-5 pl-1 flex items-center space-x-2">
                     {member.avatarUrl ? (
                       <img src={member.avatarUrl} alt={member.name} className="w-7 h-7 rounded-full object-cover border border-yellow-400 shrink-0" />
@@ -179,7 +212,6 @@ export default function Home() {
                     <span className="font-bold text-white truncate">{member.name}</span>
                   </div>
 
-                  {/* OBECNOŚĆ – Dedykowany Przycisk Trenera */}
                   <div className="col-span-3 px-1 text-center">
                     <button 
                       type="button"
@@ -194,7 +226,6 @@ export default function Home() {
                     </button>
                   </div>
 
-                  {/* SKŁADKA */}
                   <div className="col-span-2 px-1 text-center">
                     <button 
                       type="button"
@@ -209,7 +240,6 @@ export default function Home() {
                     </button>
                   </div>
 
-                  {/* Przycisk Karty */}
                   <div className="col-span-2 md:col-span-1 text-right pr-1">
                     <button 
                       type="button"
@@ -220,15 +250,13 @@ export default function Home() {
                       <span>{isExpanded ? '▲' : '▼'}</span>
                     </button>
                   </div>
-
                 </div>
 
-                {/* Pełna Karta Zawodnika */}
+                {/* Rozszerzona karta z wszystkimi danymi zawodnika */}
                 {isExpanded && (
                   <div className="bg-[#0F172A] p-4 border-t border-gray-800 space-y-4">
                     <div className="flex flex-col md:flex-row items-center gap-4">
                       
-                      {/* Aparat / Galeria / Zdjęcie */}
                       <div className="flex flex-col items-center space-y-2">
                         <div className="w-24 h-24 rounded-2xl bg-slate-800 border-2 border-yellow-400 overflow-hidden flex items-center justify-center shadow-inner">
                           {member.avatarUrl ? (
@@ -256,8 +284,8 @@ export default function Home() {
                         </button>
                       </div>
 
-                      {/* Komplet danych w karcie */}
-                      <div className="flex-1 w-full space-y-2 text-xs md:text-sm">
+                      {/* Komplet danych parametrów fizycznych i kontaktowych */}
+                      <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-2 text-xs md:text-sm">
                         <div className="flex justify-between border-b border-gray-800 pb-1">
                           <span className="text-gray-400">Imię i Nazwisko:</span>
                           <span className="font-bold text-white">{member.name}</span>
@@ -267,18 +295,20 @@ export default function Home() {
                           <span className="font-bold text-yellow-400">{member.group}</span>
                         </div>
                         <div className="flex justify-between border-b border-gray-800 pb-1">
-                          <span className="text-gray-400">Telefon kontaktowy:</span>
+                          <span className="text-gray-400">Data urodzenia:</span>
+                          <span className="font-bold text-gray-200">{member.birthDate || 'Brak danych'}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-800 pb-1">
+                          <span className="text-gray-400">Waga:</span>
+                          <span className="font-bold text-gray-200">{member.weight ? `${member.weight} kg` : 'Brak danych'}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-800 pb-1">
+                          <span className="text-gray-400">Wzrost:</span>
+                          <span className="font-bold text-gray-200">{member.height ? `${member.height} cm` : 'Brak danych'}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-800 pb-1">
+                          <span className="text-gray-400">Telefon:</span>
                           <span className="font-bold text-gray-200">{member.phone || 'Brak danych'}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-800 pb-1">
-                          <span className="text-gray-400">Data dołączenia:</span>
-                          <span className="font-bold text-gray-200">{member.joinDate || 'Brak danych'}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-800 pb-1">
-                          <span className="text-gray-400">Obecności łącznie:</span>
-                          <span className="font-bold text-green-400">
-                            {Object.values(member.attendanceHistory).filter(Boolean).length} treningów
-                          </span>
                         </div>
                       </div>
 
@@ -292,6 +322,103 @@ export default function Home() {
         </div>
 
       </div>
+
+      {/* Formularz dodawania nowego zawodnika (Modal) */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-[#1E293B] border border-yellow-500/40 p-5 rounded-2xl w-full max-w-md shadow-2xl space-y-4">
+            <h2 className="text-base font-extrabold text-yellow-400 uppercase tracking-wide border-b border-gray-700 pb-2">
+              ➕ DODAJ NOWEGO ZAWODNIKA
+            </h2>
+
+            <form onSubmit={handleAddMember} className="space-y-3 text-xs md:text-sm">
+              <div>
+                <label className="block text-gray-300 font-bold mb-1">Imię i Nazwisko *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="np. Jan Kowalski"
+                  value={newMember.name}
+                  onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
+                  className="w-full bg-[#0F172A] border border-gray-700 rounded-xl p-2.5 text-white outline-none focus:border-yellow-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-gray-300 font-bold mb-1">Grupa</label>
+                  <select 
+                    value={newMember.group}
+                    onChange={(e) => setNewMember({ ...newMember, group: e.target.value })}
+                    className="w-full bg-[#0F172A] border border-gray-700 rounded-xl p-2.5 text-white outline-none focus:border-yellow-400"
+                  >
+                    <option value="Początkująca">Początkująca</option>
+                    <option value="Zaawansowana">Zaawansowana</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-gray-300 font-bold mb-1">Data urodzenia</label>
+                  <input 
+                    type="date" 
+                    value={newMember.birthDate}
+                    onChange={(e) => setNewMember({ ...newMember, birthDate: e.target.value })}
+                    className="w-full bg-[#0F172A] border border-gray-700 rounded-xl p-2 text-white outline-none focus:border-yellow-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-gray-300 font-bold mb-1">Waga (kg)</label>
+                  <input 
+                    type="number" 
+                    placeholder="np. 75"
+                    value={newMember.weight}
+                    onChange={(e) => setNewMember({ ...newMember, weight: e.target.value })}
+                    className="w-full bg-[#0F172A] border border-gray-700 rounded-xl p-2 text-white outline-none focus:border-yellow-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-300 font-bold mb-1">Wzrost (cm)</label>
+                  <input 
+                    type="number" 
+                    placeholder="np. 180"
+                    value={newMember.height}
+                    onChange={(e) => setNewMember({ ...newMember, height: e.target.value })}
+                    className="w-full bg-[#0F172A] border border-gray-700 rounded-xl p-2 text-white outline-none focus:border-yellow-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-300 font-bold mb-1">Telefon</label>
+                  <input 
+                    type="tel" 
+                    placeholder="500..."
+                    value={newMember.phone}
+                    onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                    className="w-full bg-[#0F172A] border border-gray-700 rounded-xl p-2 text-white outline-none focus:border-yellow-400"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-gray-700">
+                <button 
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-xl font-bold"
+                >
+                  Anuluj
+                </button>
+                <button 
+                  type="submit"
+                  className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-4 py-2 rounded-xl font-extrabold"
+                >
+                  Zapisz
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
